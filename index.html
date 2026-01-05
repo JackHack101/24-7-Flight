@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>24/7 Flight</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+html, body {
+  margin: 0;
+  padding: 0;
+  background: black;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+#player {
+  width: 100vw;
+  height: 100vh;
+  position: relative;
+}
+#livebadge {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  background: red;
+  color: white;
+  padding: 10px 16px;
+  font-family: sans-serif;
+  font-weight: bold;
+  display: none;
+  z-index: 10;
+}
+#yt-controls {
+  position: absolute;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 10px;
+  z-index: 10;
+  transition: opacity 0.3s;
+}
+button {
+  padding: 8px 12px;
+  font-size: 14px;
+  cursor: pointer;
+}
+</style>
+</head>
+<body>
+
+<div id="livebadge">LIVE</div>
+<div id="player"></div>
+<div id="yt-controls" style="display:none;">
+  <button id="prev">Prev</button>
+  <button id="next">Next</button>
+</div>
+
+<script>
+const twitch_channel = "flight23white";
+const parent_domain = "jackhack101.github.io";
+let youtube_videos = [];
+let current_index = 0;
+let live = false;
+let ytplayer;
+let hideControlsTimeout;
+
+// --- check twitch live robustly ---
+async function check_live(){
+  try{
+    const res = await fetch(`https://decapi.me/twitch/uptime/${twitch_channel}?offline_msg=offline`);
+    const txt = await res.text();
+    return txt !== "offline" && txt.trim().length > 0;
+  }catch(e){
+    console.warn("twitch check failed", e);
+    return false;
+  }
+}
+
+// --- fetch videos.json ---
+async function fetch_videos(){
+  try{
+    const res = await fetch('videos.json');
+    const vids = await res.json();
+    return vids;
+  }catch(e){
+    console.warn("failed to load videos.json", e);
+    return [];
+  }
+}
+
+// --- shuffle helper ---
+function shuffle(arr){
+  for(let i=arr.length-1;i>0;i--){
+    const j = Math.floor(Math.random()*(i+1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+}
+
+// --- show/hide live badge ---
+function show_live_badge(show){
+  document.getElementById("livebadge").style.display = show?"block":"none";
+}
+
+// --- show/hide YouTube controls ---
+function show_yt_controls(show){
+  const controls = document.getElementById("yt-controls");
+  controls.style.display = show ? "flex" : "none";
+  controls.style.opacity = show ? 1 : 0;
+}
+
+// --- load twitch live ---
+function load_twitch_live(){
+  live = true;
+  show_live_badge(true);
+  show_yt_controls(false);
+  document.getElementById("player").innerHTML = `
+    <iframe
+      src="https://player.twitch.tv/?channel=${twitch_channel}&parent=${parent_domain}&autoplay=true"
+      width="100%" height="100%" allowfullscreen>
+    </iframe>`;
+}
+
+// --- load youtube video ---
+function load_youtube_video(id){
+  live = false;
+  show_live_badge(false);
+  show_yt_controls(true);
+
+  if(ytplayer){
+    ytplayer.loadVideoById(id);
+  }else{
+    document.getElementById("player").innerHTML = `<div id="yt-player"></div>`;
+    ytplayer = new YT.Player('yt-player',{
+      videoId: id,
+      width:'100%',
+      height:'100%',
+      playerVars:{
+        autoplay:1,
+        controls:1,
+        modestbranding:1,
+        rel:0,
+        disablekb:0
+      },
+      events:{
+        onStateChange: function(event){
+          if(event.data === YT.PlayerState.ENDED){
+            current_index = (current_index+1) % youtube_videos.length;
+            load_youtube_video(youtube_videos[current_index]);
+          }
+        }
+      }
+    });
+  }
+}
+
+// --- next / prev buttons ---
+document.getElementById("next").addEventListener("click", ()=>{
+  current_index = (current_index+1) % youtube_videos.length;
+  load_youtube_video(youtube_videos[current_index]);
+});
+document.getElementById("prev").addEventListener("click", ()=>{
+  current_index = (current_index-1 + youtube_videos.length) % youtube_videos.length;
+  load_youtube_video(youtube_videos[current_index]);
+});
+
+// --- hide controls after inactivity ---
+function setup_cursor_hide(){
+  document.addEventListener("mousemove", ()=>{
+    show_yt_controls(!live); // show only if not live
+    clearTimeout(hideControlsTimeout);
+    hideControlsTimeout = setTimeout(()=>show_yt_controls(false), 3000);
+  });
+}
+
+// --- init ---
+async function init(){
+  youtube_videos = await fetch_videos();
+  if(!youtube_videos.length){
+    document.getElementById("player").innerHTML = "<p style='color:white;font-family:sans-serif;text-align:center;margin-top:50px;'>no youtube videos found</p>";
+    return;
+  }
+  shuffle(youtube_videos);
+  current_index = 0;
+
+  const live_now = await check_live();
+  if(live_now){
+    load_twitch_live();
+  }else{
+    load_youtube_video(youtube_videos[current_index]);
+  }
+
+  setup_cursor_hide();
+
+  // check live every 10 seconds
+  setInterval(async ()=>{
+    const live_now = await check_live();
+    if(live_now && !live){
+      load_twitch_live();
+    }else if(!live_now && live){
+      load_youtube_video(youtube_videos[current_index]);
+    }
+  },10000);
+}
+
+// --- load youtube iframe api ---
+const tag = document.createElement('script');
+tag.src = "https://www.youtube.com/iframe_api";
+document.head.appendChild(tag);
+tag.onload = init;
+</script>
+</body>
+</html>
