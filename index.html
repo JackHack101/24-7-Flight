@@ -165,11 +165,11 @@ document.getElementById("prev").addEventListener("click", ()=>{
 });
 
 // --- hide controls after inactivity ---
-function setup_cursor_hide(){
-  document.addEventListener("mousemove", ()=>{
-    show_yt_controls(!live); // show only if not live
-    clearTimeout(hideControlsTimeout);
-    hideControlsTimeout = setTimeout(()=>show_yt_controls(false), 3000);
+//function setup_cursor_hide(){
+//  document.addEventListener("mousemove", ()=>{
+//    show_yt_controls(!live); // show only if not live
+//    clearTimeout(hideControlsTimeout);
+//    hideControlsTimeout = setTimeout(()=>show_yt_controls(false), 3000);
   });
 }
 
